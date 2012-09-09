@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/4ad/doozer"
 	"github.com/4ad/doozerd/peer"
+	"github.com/4ad/doozerd/logging"
 	"log"
 	"net"
 	"os"
@@ -39,6 +40,7 @@ var (
 	hi          = flag.Int64("hist", 2000, "length of history/revisions to keep")
 	certFile    = flag.String("tlscert", "", "TLS public certificate")
 	keyFile     = flag.String("tlskey", "", "TLS private key")
+	logLevel       = flag.String("log", "warn", "LogLevel [debug,info,warn,error,fatal,none]")
 )
 
 var (
@@ -77,8 +79,11 @@ func main() {
 	flag.Usage = Usage
 	flag.Parse()
 
+	logging.SetLogger(log.New(os.Stderr, "", log.Lmicroseconds | log.Lshortfile), *logLevel)
+	// logging.SetLogger(log.New(os.Stderr, "", LstdFlags), *LogLevel)
+
 	if *showVersion {
-		fmt.Println("doozerd", peer.Version)
+		Logf(INFO, "doozerd version=%v", peer.Version)
 		return
 	}
 
@@ -92,9 +97,6 @@ func main() {
 	for i, addr := range aaddrs {
 		aaddrs[i] = fixLazyAddress(addr)
 	}
-
-	log.SetPrefix("DOOZER ")
-	log.SetFlags(log.Ldate | log.Lmicroseconds)
 
 	tsock, err := net.Listen("tcp", *laddr)
 	if err != nil {

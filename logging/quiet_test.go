@@ -1,4 +1,4 @@
-package quiet
+package logging
 
 import "testing"
 
