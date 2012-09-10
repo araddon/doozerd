@@ -83,12 +83,12 @@ func main() {
 	// logging.SetLogger(log.New(os.Stderr, "", LstdFlags), *LogLevel)
 
 	if *showVersion {
-		Logf(INFO, "doozerd version=%v", peer.Version)
+		logging.Logf(logging.INFO, "doozerd version=%v", peer.Version)
 		return
 	}
 
 	if *laddr == "" {
-		fmt.Fprintln(os.Stderr, "require a listen address")
+		logging.Log(logging.ERROR, os.Stderr, "require a listen address")
 		flag.Usage()
 		os.Exit(1)
 	}

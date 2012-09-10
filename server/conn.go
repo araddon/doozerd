@@ -4,9 +4,10 @@ import (
 	"code.google.com/p/goprotobuf/proto"
 	"encoding/binary"
 	"github.com/4ad/doozerd/consensus"
+	. "github.com/4ad/doozerd/logging"
 	"github.com/4ad/doozerd/store"
 	"io"
-	"log"
+	"strings"
 	"sync"
 )
 
@@ -21,6 +22,7 @@ type conn struct {
 	rosk     string
 	waccess  bool
 	raccess  bool
+	haseph   bool // has any ephemeral nodes?
 }
 
 func (c *conn) serve() {
@@ -30,12 +32,20 @@ func (c *conn) serve() {
 		err := c.read(&t.req)
 		if err != nil {
 			if err != io.EOF {
-				log.Println(err)
+				Log(ERROR, err)
+			} else {
+				Logf(WARN, "Client Disconnecting: %s  Cleanup ephermerals?=%v", c.addr, c.haseph)
+				t.cleanEph()
+				return
 			}
 			return
 		}
 		t.run()
 	}
+}
+
+func (c *conn) addrStrip() string {
+	return strings.Replace(c.addr, ":", "", -1)
 }
 
 func (c *conn) read(r *request) error {

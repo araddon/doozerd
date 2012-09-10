@@ -3,7 +3,7 @@ package server
 import (
 	"github.com/4ad/doozerd/consensus"
 	"github.com/4ad/doozerd/store"
-	"log"
+	. "github.com/4ad/doozerd/logging"
 	"net"
 	"syscall"
 )
@@ -21,7 +21,7 @@ func ListenAndServe(l net.Listener, canWrite chan bool, st *store.Store, p conse
 			if e, ok := err.(*net.OpError); ok && e.Err == syscall.EINVAL {
 				break
 			}
-			log.Println(err)
+			Log(ERROR, err)
 			continue
 		}
 
@@ -46,7 +46,7 @@ func serve(nc net.Conn, st *store.Store, p consensus.Proposer, w bool, rwsk, ros
 		rwsk:     rwsk,
 		rosk:     rosk,
 	}
-
+	Logf(INFO, "New Client Conn: %s", c.addr)
 	c.grant("") // start as if the client supplied a blank password
 	c.serve()
 	nc.Close()

@@ -3,10 +3,13 @@ package server
 import (
 	"code.google.com/p/goprotobuf/proto"
 	"github.com/4ad/doozerd/consensus"
+	. "github.com/4ad/doozerd/logging"
 	"github.com/4ad/doozerd/store"
 	"io"
 	"log"
+	"math"
 	"sort"
+	"strings"
 	"syscall"
 )
 
@@ -16,6 +19,8 @@ type txn struct {
 	resp response
 }
 
+var _ = LogLevel
+
 var ops = map[int32]func(*txn){
 	int32(request_DEL):    (*txn).del,
 	int32(request_GET):    (*txn).get,
@@ -23,6 +28,7 @@ var ops = map[int32]func(*txn){
 	int32(request_NOP):    (*txn).nop,
 	int32(request_REV):    (*txn).rev,
 	int32(request_SET):    (*txn).set,
+	int32(request_SETEPH): (*txn).seteph,
 	int32(request_STAT):   (*txn).stat,
 	int32(request_WAIT):   (*txn).wait,
 	int32(request_WALK):   (*txn).walk,
@@ -40,6 +46,7 @@ const (
 func (t *txn) run() {
 	//verb := proto.GetInt32((*int32)(t.req.Verb))
 	verb := int32(t.req.GetVerb())
+	Logf(INFO, "cmd: Verb=%s, Path=%s rev=%d", request_Verb_name[verb], *t.req.Path, *t.req.Rev)
 	if f, ok := ops[verb]; ok {
 		f(t)
 	} else {
@@ -105,7 +112,33 @@ func (t *txn) set() {
 		t.respond()
 	}()
 }
+func (t *txn) seteph() {
+	if !t.c.waccess {
+		t.respondOsError(syscall.EACCES)
+		return
+	}
 
+	if !t.c.canWrite {
+		t.respondErrCode(response_READONLY)
+		return
+	}
+
+	if t.req.Path == nil || t.req.Rev == nil {
+		t.respondErrCode(response_MISSING_ARG)
+		return
+	}
+
+	go func() {
+		ev := consensus.SetEph(t.c.p, t.c.addrStrip(), *t.req.Path, t.req.Value, *t.req.Rev)
+		if ev.Err != nil {
+			t.respondOsError(ev.Err)
+			return
+		}
+		t.resp.Rev = &ev.Seqn
+		t.c.haseph = true
+		t.respond()
+	}()
+}
 func (t *txn) del() {
 	if !t.c.waccess {
 		t.respondOsError(syscall.EACCES)
@@ -300,6 +333,54 @@ func (t *txn) walk() {
 		if !store.Walk(g, glob, f) {
 			t.respondErrCode(response_RANGE)
 		}
+	}()
+}
+
+func deleteWalk(c *conn, g store.Getter, glob *store.Glob, wpath, ephRoot string) {
+	ents, rev := g.Get(wpath)
+	if rev == store.Missing {
+		Log(WARN, "missing? ", wpath)
+		return
+	}
+	if rev != store.Dir {
+		nodePath := strings.Replace(wpath, ephRoot, "", -1)
+		Logf(INFO, "del eph node=%s", wpath)
+		consensus.Del(c.p, wpath, int64(math.MaxInt64))
+		Logf(INFO, "del node=%s", nodePath)
+		consensus.Del(c.p, nodePath, int64(math.MaxInt64))
+	} else {
+		Logf(WARN, "wpath=%s, len=%d   ents=%v", wpath, len(ents), ents)
+		for _, p := range ents {
+			path := wpath + "/" + p
+			nodePath := strings.Replace(path, ephRoot, "", -1)
+			deleteWalk(c, g, glob, path, ephRoot)
+			Logf(INFO, "del eph dir=%s ", path)
+			consensus.Del(c.p, path, int64(math.MaxInt64))
+			Logf(INFO, "del node=%s", nodePath)
+			consensus.Del(c.p, nodePath, int64(math.MaxInt64))
+		}
+	}
+}
+
+func (t *txn) cleanEph() {
+	if !t.c.haseph {
+		return
+	}
+	path := "/eph/" + t.c.addrStrip()
+	Log(INFO, "clean ephemeral for lost client: ", path)
+
+	glob, err := store.CompileGlob(path + "/**")
+	if err != nil {
+		t.respondOsError(err)
+		return
+	}
+
+	go func() {
+		g, err := t.getter()
+		if err != nil {
+			return
+		}
+		deleteWalk(t.c, g, glob, path, path)
 	}()
 }
 
