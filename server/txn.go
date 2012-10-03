@@ -46,7 +46,7 @@ const (
 func (t *txn) run() {
 	//verb := proto.GetInt32((*int32)(t.req.Verb))
 	verb := int32(t.req.GetVerb())
-	Logf(INFO, "cmd: Verb=%s, Path=%s rev=%d", request_Verb_name[verb], *t.req.Path, *t.req.Rev)
+	Logf(INFO, "cmd: Verb=%s, Path=%v rev=%v", request_Verb_name[verb], t.req.Path, t.req.Rev)
 	if f, ok := ops[verb]; ok {
 		f(t)
 	} else {
@@ -112,6 +112,7 @@ func (t *txn) set() {
 		t.respond()
 	}()
 }
+
 func (t *txn) seteph() {
 	if !t.c.waccess {
 		t.respondOsError(syscall.EACCES)
@@ -139,6 +140,7 @@ func (t *txn) seteph() {
 		t.respond()
 	}()
 }
+
 func (t *txn) del() {
 	if !t.c.waccess {
 		t.respondOsError(syscall.EACCES)
@@ -367,7 +369,7 @@ func (t *txn) cleanEph() {
 		return
 	}
 	path := "/eph/" + t.c.addrStrip()
-	Log(INFO, "clean ephemeral for lost client: ", path)
+	Log(INFO, "clean ephemeral node data: ", path)
 
 	glob, err := store.CompileGlob(path + "/**")
 	if err != nil {

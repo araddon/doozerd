@@ -25,18 +25,31 @@ type conn struct {
 	haseph   bool // has any ephemeral nodes?
 }
 
+func isDisconnect(e error) bool {
+	if e == io.EOF {
+		return true
+	}
+	es := e.Error()
+	if strings.Contains(es, "connection reset by peer") {
+		return true
+	}
+	return false
+}
+
 func (c *conn) serve() {
 	for {
 		var t txn
 		t.c = c
 		err := c.read(&t.req)
 		if err != nil {
-			if err != io.EOF {
-				Log(ERROR, err)
-			} else {
+			// This is pretty weak, probably should allow for re-connects
+			// with a time-window to reconnect?  Which would require protocol
+			// changes for some type of "clientId"?
+			if isDisconnect(err) {
 				Logf(WARN, "Client Disconnecting: %s  Cleanup ephermerals?=%v", c.addr, c.haseph)
 				t.cleanEph()
-				return
+			} else {
+				Log(ERROR, err)
 			}
 			return
 		}

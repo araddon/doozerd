@@ -23,6 +23,7 @@ func SetEph(p Proposer, client, path string, body []byte, rev int64) (e store.Ev
 	}
 	if e = p.Propose([]byte(e.Mut)); e.Err != nil {
 		Logf(ERROR, "ERROR on ephemeral? %s   err=%v", "/eph/"+client+path, e.Err)
+		return e
 	}
 
 	// now store the item
