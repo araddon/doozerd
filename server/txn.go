@@ -164,6 +164,11 @@ func (t *txn) del() {
 			return
 		}
 		t.respond()
+		go func() {
+			path := "/eph/" + t.c.addrStrip() + *t.req.Path
+			//Log(INFO, "clean ephemeral node data? ", path)
+			consensus.Del(t.c.p, path, math.MaxInt64)
+		}()
 	}()
 }
 
